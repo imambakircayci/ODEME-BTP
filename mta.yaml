@@ -1,0 +1,115 @@
+# ============================================================
+# MTA Deployment Descriptor
+# SAP BTP CAP Application - Vendor Line Items
+# 
+# Bu dosya uygulamanın BTP Cloud Foundry ortamına
+# deploy edilmesi için gerekli tüm yapılandırmaları içerir.
+#
+# Akış: Approuter → CAP Srv → Destination → Cloud Connector → SAP
+# ============================================================
+
+_schema-version: "3.2"
+ID: btp-api
+version: 1.0.0
+description: "SAP BTP Vendor Line Items Dashboard"
+
+parameters:
+  enable-parallel-deployments: true
+
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npm ci
+        - npx cds build --production
+
+# ═══════════════════════════════════════════════════════════
+# MODULES
+# ═══════════════════════════════════════════════════════════
+modules:
+
+  # ─── Backend Service (CAP Node.js) ──────────────────────
+  - name: btp-api-srv
+    type: nodejs
+    path: gen/srv
+    parameters:
+      buildpack: nodejs_buildpack
+      memory: 256M
+      disk-quota: 512M
+    build-parameters:
+      builder: npm
+      ignore:
+        - "node_modules/"
+        - "default-env.json"
+    provides:
+      - name: srv-api
+        properties:
+          srv-url: "${default-url}"
+    requires:
+      - name: btp-api-auth
+      - name: btp-api-destination
+      - name: btp-api-connectivity
+
+  # ─── Application Router (Frontend + Proxy) ─────────────
+  - name: btp-api-approuter
+    type: approuter.nodejs
+    path: app/vendor-open-items
+    parameters:
+      buildpack: nodejs_buildpack
+      memory: 128M
+      disk-quota: 256M
+    build-parameters:
+      builder: npm
+      ignore:
+        - "node_modules/"
+    requires:
+      - name: srv-api
+        group: destinations
+        properties:
+          name: srv-api
+          url: "~{srv-url}"
+          forwardAuthToken: true
+      - name: btp-api-auth
+
+# ═══════════════════════════════════════════════════════════
+# RESOURCES (BTP Services)
+# ═══════════════════════════════════════════════════════════
+resources:
+
+  # ─── XSUAA (Authentication) ────────────────────────────
+  - name: btp-api-auth
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+      path: ./xs-security.json
+      config:
+        xsappname: btp-api-${org}-${space}
+        tenant-mode: dedicated
+        scopes:
+          - name: "$XSAPPNAME.admin"
+            description: "Admin Access"
+        role-templates:
+          - name: "AdminRole"
+            description: "Admin Role"
+            scope-references:
+              - "$XSAPPNAME.admin"
+        role-collections:
+          - name: "btp-api-admin"
+            description: "Admin Role Collection"
+            role-template-references:
+              - "$XSAPPNAME.AdminRole"
+
+  # ─── Destination Service ───────────────────────────────
+  - name: btp-api-destination
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: destination
+      service-plan: lite
+
+  # ─── Connectivity Service (Cloud Connector) ────────────
+  - name: btp-api-connectivity
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: connectivity
+      service-plan: lite

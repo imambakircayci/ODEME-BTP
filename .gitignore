@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+gen/
+dist/
+
+# CDS output
+app/**/*.timestamp
+_out/
+
+# Local dev config (contains credentials)
+default-env.json
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# MTA build
+*.mtar
+mta_archives/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Coverage
+coverage/

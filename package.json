@@ -1,0 +1,36 @@
+{
+  "name": "btp-api",
+  "version": "1.0.0",
+  "description": "SAP BTP CAP Application - Vendor Open Items via On-Premise API",
+  "repository": "",
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "@sap/cds": "^9",
+    "@sap-cloud-sdk/http-client": "^3",
+    "@sap-cloud-sdk/connectivity": "^3",
+    "@sap-cloud-sdk/resilience": "^3",
+    "express": "^4",
+    "passport": "^0.7"
+  },
+  "devDependencies": {
+    "@cap-js/sqlite": "^2",
+    "@sap/cds-dk": "^9",
+    "rimraf": "^5"
+  },
+  "scripts": {
+    "start": "cds-serve",
+    "build": "cds build --production",
+    "clean": "rimraf gen",
+    "watch": "cds watch"
+  },
+  "cds": {
+    "requires": {
+      "auth": {
+        "strategy": "JWT"
+      },
+      "destinations": true,
+      "connectivity": true
+    }
+  }
+}
