@@ -1,636 +1,432 @@
 /**
- * ============================================================
- * BTP Vendor Dashboard - Application Logic
- * 
- * Custom vanilla JS app that connects to CAP OData service
- * and renders vendor line items in a modern dashboard.
- * 
- * Flow: UI → CAP Backend → Destination → Cloud Connector → SAP
- * ============================================================
+ * BTP Vendor Dashboard Logic
+ * HANA Cloud Integration with Modern SM30 Style Editor
+ * Best Practices: CSRF Protection & Enhanced Error Handling (Wait-Safe)
  */
 
-// ─── State Management ──────────────────────────────────────
+// STATE MANAGEMENT
 const AppState = {
-    allData: [],          // Full dataset from API
-    filteredData: [],     // After filter/search
-    currentFilter: 'all', // all | open | overdue | cleared
-    searchQuery: '',
-    sortField: 'PostingDate',
-    sortDesc: true,
-    isLoading: true,
-    error: null
+    ApproverGroups: [],
+    ApproverUsers: [],
+    GroupDetermination: [],
+    ApprovalDetermination: [],
+    vendors: [],
+    selectedVendor: null,
+    currentView: 'page-approval',
+    activeConfigTable: 'ApproverGroups'
 };
 
-// ─── API Config ────────────────────────────────────────────
-const API_BASE = '../api/vendor';
+// ---------------------------------------------------------
+// ROUTER (VIEW MANAGER)
+// ---------------------------------------------------------
+const Router = {
+    init: function () {
+        this.navigate('page-approval');
+        DataService.fetchVendors();
+    },
 
-// ─── Init ──────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('[BTP Dashboard] Initializing...');
-    fetchData();
-});
-
-// ═══════════════════════════════════════════════════════════
-// DATA FETCHING
-// ═══════════════════════════════════════════════════════════
-
-/**
- * Fetch vendor line items from CAP OData service
- * CAP → Destination Service → Cloud Connector → On-Premise SAP
- */
-async function fetchData() {
-    showLoading(true);
-    hideError();
-    hideEmpty();
-
-    try {
-        console.log('[BTP Dashboard] Fetching data from:', API_BASE + '/VendorLineItems');
-
-        const response = await fetch(`${API_BASE}/VendorLineItems?$top=500&$orderby=PostingDate desc`, {
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            }
+    navigate: function (viewId) {
+        document.querySelectorAll('.view-section').forEach(el => {
+            el.classList.remove('active');
+            el.style.display = 'none';
         });
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`HTTP ${response.status}: ${errorText}`);
+        const target = document.getElementById(viewId);
+        if (target) {
+            target.classList.add('active');
+            target.style.display = 'flex';
         }
 
-        const json = await response.json();
-        const data = json.value || json.d?.results || json || [];
+        document.querySelectorAll('.menu-item').forEach(btn => btn.classList.remove('active'));
+        const menuIndex = viewId === 'page-approval' ? 0 : (viewId === 'page-settings' ? 1 : 2);
+        const menuItem = document.querySelectorAll('.menu-item')[menuIndex];
+        if (menuItem) menuItem.classList.add('active');
 
-        console.log(`[BTP Dashboard] Received ${data.length} records`);
-
-        AppState.allData = data;
-        AppState.error = null;
-
-        // Calculate KPIs
-        updateKPIs(data);
-
-        // Apply current filters and render
-        applyFiltersAndRender();
-
-        // Update connection status
-        setConnectionStatus(true);
-        updateLastRefresh();
-
-    } catch (error) {
-        console.error('[BTP Dashboard] Fetch error:', error);
-        AppState.error = error.message;
-        showError(error.message);
-        setConnectionStatus(false);
-    } finally {
-        showLoading(false);
-    }
-}
-
-// ═══════════════════════════════════════════════════════════
-// KPI CALCULATIONS
-// ═══════════════════════════════════════════════════════════
-
-function updateKPIs(data) {
-    const totalItems = data.length;
-
-    let totalAmount = 0;
-    let currency = 'TRY';
-    const suppliers = new Set();
-    let overdueCount = 0;
-    let openCount = 0;
-    let clearedCount = 0;
-    const today = new Date();
-
-    data.forEach(item => {
-        totalAmount += parseFloat(item.AmountInCompanyCodeCurrency || 0);
-        if (item.CompanyCodeCurrency) currency = item.CompanyCodeCurrency;
-        if (item.Supplier) suppliers.add(item.Supplier);
-
-        const isCleared = item.IsCleared === 'X' || item.IsCleared === true;
-        if (isCleared) {
-            clearedCount++;
-        } else {
-            const dueDate = item.NetDueDate ? new Date(item.NetDueDate) : null;
-            if (dueDate && dueDate < today) {
-                overdueCount++;
-            } else {
-                openCount++;
-            }
-        }
-    });
-
-    // Update DOM
-    animateValue('kpiTotalItems', totalItems);
-    document.getElementById('kpiTotalAmount').textContent = formatNumber(totalAmount);
-    document.getElementById('kpiCurrency').textContent = currency;
-    animateValue('kpiSupplierCount', suppliers.size);
-    animateValue('kpiOverdueCount', overdueCount);
-
-    // Update chip counts
-    document.getElementById('chipCountAll').textContent = totalItems;
-    document.getElementById('chipCountOpen').textContent = openCount;
-    document.getElementById('chipCountOverdue').textContent = overdueCount;
-    document.getElementById('chipCountCleared').textContent = clearedCount;
-}
-
-function animateValue(elementId, value) {
-    const el = document.getElementById(elementId);
-    if (!el) return;
-
-    const duration = 600;
-    const start = parseInt(el.textContent) || 0;
-    const diff = value - start;
-    const startTime = performance.now();
-
-    function update(currentTime) {
-        const elapsed = currentTime - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-
-        // Ease out cubic
-        const easedProgress = 1 - Math.pow(1 - progress, 3);
-        const current = Math.round(start + diff * easedProgress);
-
-        el.textContent = current.toLocaleString('tr-TR');
-
-        if (progress < 1) {
-            requestAnimationFrame(update);
+        if (viewId === 'page-settings') {
+            Config.openTab(document.querySelector('.tab-btn.active'), AppState.activeConfigTable);
         }
     }
+};
 
-    requestAnimationFrame(update);
-}
+// ---------------------------------------------------------
+// CONFIG PAGE CONTROLLER (HANA CRUD Logic)
+// ---------------------------------------------------------
+const Config = {
+    activeTable: 'ApproverGroups',
 
-// ═══════════════════════════════════════════════════════════
-// FILTERING & SEARCH
-// ═══════════════════════════════════════════════════════════
+    openTab: function (tabBtn, tableName) {
+        if (!tabBtn) return;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        tabBtn.classList.add('active');
 
-function applyFiltersAndRender() {
-    let data = [...AppState.allData];
-    const today = new Date();
+        this.activeTable = tableName;
+        AppState.activeConfigTable = tableName;
 
-    // Apply filter
-    if (AppState.currentFilter === 'open') {
-        data = data.filter(item => {
-            const isCleared = item.IsCleared === 'X' || item.IsCleared === true;
-            const dueDate = item.NetDueDate ? new Date(item.NetDueDate) : null;
-            return !isCleared && (!dueDate || dueDate >= today);
+        DataService.fetchConfigTable(tableName).then(() => {
+            this.renderTable(tableName);
         });
-    } else if (AppState.currentFilter === 'overdue') {
-        data = data.filter(item => {
-            const isCleared = item.IsCleared === 'X' || item.IsCleared === true;
-            const dueDate = item.NetDueDate ? new Date(item.NetDueDate) : null;
-            return !isCleared && dueDate && dueDate < today;
-        });
-    } else if (AppState.currentFilter === 'cleared') {
-        data = data.filter(item => item.IsCleared === 'X' || item.IsCleared === true);
-    }
+    },
 
-    // Apply search
-    if (AppState.searchQuery) {
-        const q = AppState.searchQuery.toLowerCase();
-        data = data.filter(item =>
-            (item.Supplier || '').toLowerCase().includes(q) ||
-            (item.SupplierName || '').toLowerCase().includes(q) ||
-            (item.AccountingDocument || '').toLowerCase().includes(q) ||
-            (item.DocumentReferenceID || '').toLowerCase().includes(q)
-        );
-    }
+    renderTable: function (tableName) {
+        const container = document.getElementById('configTableContainer');
+        if (!container) return;
 
-    // Apply sort
-    data.sort((a, b) => {
-        let valA = a[AppState.sortField];
-        let valB = b[AppState.sortField];
+        const data = AppState[tableName] || [];
 
-        if (AppState.sortField === 'AmountInCompanyCodeCurrency' || AppState.sortField === 'ArrearsInDays') {
-            valA = parseFloat(valA) || 0;
-            valB = parseFloat(valB) || 0;
+        let columns = [];
+        let icon = '';
+        let title = '';
+
+        if (tableName === 'ApproverGroups') {
+            title = 'ONAYCI GRUPLARI';
+            icon = 'fa-users-gear';
+            columns = [
+                { key: 'GroupCode', label: 'GRUP KODU', type: 'text', width: '150px' },
+                { key: 'Description', label: 'TANIM', type: 'text' }
+            ];
+        } else if (tableName === 'ApproverUsers') {
+            title = 'ONAYCI KULLANICILARI';
+            icon = 'fa-user-tag';
+            const groupOptions = (AppState.ApproverGroups || []).map(g => g.GroupCode);
+            columns = [
+                { key: 'Group_GroupCode', label: 'GRUP KODU', type: 'select', options: groupOptions, width: '200px' },
+                { key: 'Counter', label: 'SIRA', type: 'number', width: '100px' },
+                { key: 'Username', label: 'KULLANICI (SAP ID)', type: 'text', width: '200px' },
+                { key: 'LimitAmount', label: 'ONAY LİMİTİ', type: 'number' }
+            ];
         } else {
-            valA = (valA || '').toString();
-            valB = (valB || '').toString();
+            title = tableName;
+            icon = 'fa-table';
         }
 
-        if (valA < valB) return AppState.sortDesc ? 1 : -1;
-        if (valA > valB) return AppState.sortDesc ? -1 : 1;
-        return 0;
-    });
-
-    AppState.filteredData = data;
-    renderTable(data);
-    updateRecordCount(data.length);
-
-    if (data.length === 0 && AppState.allData.length > 0) {
-        showEmpty();
-    } else {
-        hideEmpty();
-    }
-}
-
-function setFilter(filter, chipElement) {
-    AppState.currentFilter = filter;
-
-    // Update chip active states
-    document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-    chipElement.classList.add('active');
-
-    applyFiltersAndRender();
-}
-
-function onSearchInput(value) {
-    AppState.searchQuery = value.trim();
-
-    const clearBtn = document.getElementById('searchClear');
-    clearBtn.style.display = value ? 'flex' : 'none';
-
-    applyFiltersAndRender();
-}
-
-function clearSearch() {
-    document.getElementById('searchInput').value = '';
-    AppState.searchQuery = '';
-    document.getElementById('searchClear').style.display = 'none';
-    applyFiltersAndRender();
-}
-
-function onSortChange(value) {
-    const [field, direction] = value.split('-');
-    AppState.sortField = field;
-    AppState.sortDesc = direction === 'desc';
-    applyFiltersAndRender();
-}
-
-// ═══════════════════════════════════════════════════════════
-// TABLE RENDERING
-// ═══════════════════════════════════════════════════════════
-
-function renderTable(data) {
-    const tbody = document.getElementById('tableBody');
-
-    if (data.length === 0) {
-        tbody.innerHTML = '';
-        return;
-    }
-
-    const today = new Date();
-
-    const rows = data.map((item, index) => {
-        const isCleared = item.IsCleared === 'X' || item.IsCleared === true;
-        const amount = parseFloat(item.AmountInCompanyCodeCurrency || 0);
-        const arrears = parseInt(item.ArrearsInDays || 0);
-        const dueDate = item.NetDueDate ? new Date(item.NetDueDate) : null;
-        const isOverdue = !isCleared && dueDate && dueDate < today;
-
-        // Status
-        let statusClass, statusText;
-        if (isCleared) {
-            statusClass = 'status-cleared';
-            statusText = 'Temizlendi';
-        } else if (isOverdue) {
-            statusClass = 'status-overdue';
-            statusText = 'Gecikmiş';
-        } else {
-            statusClass = 'status-open';
-            statusText = 'Açık';
-        }
-
-        // Arrears
-        let arrearsClass;
-        if (arrears > 30) arrearsClass = 'arrears-danger';
-        else if (arrears > 0) arrearsClass = 'arrears-warning';
-        else arrearsClass = 'arrears-ok';
-
-        // Amount class
-        const amountClass = amount < 0 ? 'negative' : 'positive';
-
-        return `
-            <tr style="animation-delay: ${Math.min(index * 0.02, 0.5)}s" onclick="openDetail(${index})">
-                <td>
-                    <div class="cell-supplier">
-                        <span class="supplier-no">${item.Supplier || '-'}</span>
-                        <span class="supplier-name">${item.SupplierName || '-'}</span>
-                    </div>
-                </td>
-                <td style="text-align:center">
-                    <span class="company-badge">${item.CompanyCode || '-'}</span>
-                </td>
-                <td>${item.AccountingDocument || '-'}</td>
-                <td style="text-align:center">
-                    <span class="type-badge">${item.AccountingDocumentType || '-'}</span>
-                </td>
-                <td>${formatDate(item.PostingDate)}</td>
-                <td>${formatDate(item.NetDueDate)}</td>
-                <td>
-                    <div class="cell-amount ${amountClass}">
-                        ${formatNumber(amount)}
-                        <span class="cell-currency">${item.CompanyCodeCurrency || ''}</span>
-                    </div>
-                </td>
-                <td style="text-align:center">
-                    <span class="arrears-badge ${arrearsClass}">
-                        ${arrears > 0 ? arrears + ' gün' : '-'}
-                    </span>
-                </td>
-                <td style="text-align:center">
-                    <span class="status-badge ${statusClass}">
-                        <span class="status-dot"></span>
-                        ${statusText}
-                    </span>
-                </td>
-                <td style="text-align:center">
-                    <button class="action-btn" onclick="event.stopPropagation(); openDetail(${index})" title="Detay">
-                        <i class="ph ph-arrow-square-out"></i>
-                    </button>
-                </td>
-            </tr>
+        const toolbarHtml = `
+            <h3><i class="fa-solid ${icon}"></i> ${title}</h3>
+            <div style="flex:1"></div>
+            <button class="btn btn-sm btn-outline success" onclick="Config.saveNewRow()">
+                <i class="fa-solid fa-floppy-disk"></i> Kaydet (Yeni)
+            </button>
+            <button class="btn btn-sm btn-primary" onclick="Config.addNewRowUI()">
+                <i class="fa-solid fa-plus"></i> Yeni Giriş
+            </button>
+            <button class="btn btn-sm btn-outline danger" onclick="Config.deleteSelectedRows()">
+                <i class="fa-solid fa-trash-can"></i> Sil
+            </button>
         `;
-    }).join('');
+        const toolbar = document.querySelector('.table-toolbar');
+        if (toolbar) toolbar.innerHTML = toolbarHtml;
 
-    tbody.innerHTML = rows;
-}
+        let html = `
+            <table class="modern-grid">
+                <thead>
+                    <tr>
+                        <th class="check-col"><input type="checkbox" onchange="Config.selectAll(this)"></th>
+                        ${columns.map(c => `<th style="width:${c.width || 'auto'}">${c.label}</th>`).join('')}
+                    </tr>
+                </thead>
+                <tbody>
+        `;
 
-// ═══════════════════════════════════════════════════════════
-// DETAIL MODAL
-// ═══════════════════════════════════════════════════════════
+        if (data.length === 0) {
+            html += `<tr><td colspan="${columns.length + 1}" class="empty-placeholder"><i class="fa-solid fa-database"></i><br>Kayıt Yok.</td></tr>`;
+        } else {
+            data.forEach((row, index) => {
+                const isNew = row._isNew ? 'style="background:rgba(16, 185, 129, 0.1)"' : '';
+                html += `<tr ${isNew}>
+                    <td class="check-col">
+                        <div class="cell-wrapper" style="justify-content:center">
+                            <input type="checkbox" class="config-row-select" data-index="${index}">
+                        </div>
+                    </td>
+                    ${columns.map(col => `
+                        <td>${this.renderInput(col, row[col.key], index)}</td>
+                    `).join('')}
+                </tr>`;
+            });
+        }
 
-function openDetail(index) {
-    const item = AppState.filteredData[index];
-    if (!item) return;
+        html += `</tbody></table>`;
+        container.innerHTML = html;
+    },
 
-    const isCleared = item.IsCleared === 'X' || item.IsCleared === true;
-    const amount = parseFloat(item.AmountInCompanyCodeCurrency || 0);
-    const arrears = parseInt(item.ArrearsInDays || 0);
+    renderInput: function (col, value, rowIndex) {
+        if (col.type === 'select') {
+            return `
+                <select onchange="Config.updateCell('${col.key}', ${rowIndex}, this.value)">
+                    <option value="" disabled ${!value ? 'selected' : ''}>Seçiniz</option>
+                    ${(col.options || []).map(opt => `<option value="${opt}" ${opt === value ? 'selected' : ''}>${opt}</option>`).join('')}
+                </select>
+            `;
+        } else {
+            return `<input type="${col.type}" value="${value || ''}" placeholder="..." 
+                    onchange="Config.updateCell('${col.key}', ${rowIndex}, this.value)">`;
+        }
+    },
 
-    let statusHtml;
-    if (isCleared) {
-        statusHtml = '<span class="status-badge status-cleared"><span class="status-dot"></span>Temizlendi</span>';
-    } else if (arrears > 0) {
-        statusHtml = '<span class="status-badge status-overdue"><span class="status-dot"></span>Gecikmiş</span>';
-    } else {
-        statusHtml = '<span class="status-badge status-open"><span class="status-dot"></span>Açık</span>';
+    addNewRowUI: function () {
+        const newRow = { _isNew: true };
+        if (!AppState[this.activeTable]) AppState[this.activeTable] = [];
+        AppState[this.activeTable].push(newRow);
+        this.renderTable(this.activeTable);
+    },
+
+    updateCell: function (key, index, value) {
+        if (AppState[this.activeTable][index]) {
+            AppState[this.activeTable][index][key] = value;
+        }
+    },
+
+    selectAll: function (source) {
+        const checkboxes = document.querySelectorAll('.config-row-select');
+        checkboxes.forEach(cb => cb.checked = source.checked);
+    },
+
+    saveNewRow: async function () {
+        const newRows = AppState[this.activeTable].filter(r => r._isNew);
+        if (newRows.length === 0) { alert("Kaydedilecek yeni giriş yok."); return; }
+
+        const btn = document.querySelector('.btn-outline.success');
+        const oldContent = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Kaydediliyor...';
+        btn.disabled = true;
+
+        try {
+            await DataService.createConfigRows(this.activeTable, newRows);
+            alert("Kayıt Başarılı!");
+            // Tabloyu yenile
+            await DataService.fetchConfigTable(this.activeTable);
+            this.renderTable(this.activeTable);
+        } catch (e) {
+            alert("Hata: " + e.message);
+        } finally {
+            btn.innerHTML = oldContent;
+            btn.disabled = false;
+        }
+    },
+
+    deleteSelectedRows: async function () {
+        const checkboxes = document.querySelectorAll('.config-row-select:checked');
+        if (checkboxes.length === 0) return;
+
+        if (!confirm(`${checkboxes.length} kaydı silmek istediğinize emin misiniz?`)) return;
+
+        const toDelete = Array.from(checkboxes).map(cb => AppState[this.activeTable][cb.dataset.index]);
+
+        try {
+            await DataService.deleteConfigRows(this.activeTable, toDelete);
+            alert("Silme Başarılı!");
+            await DataService.fetchConfigTable(this.activeTable);
+            this.renderTable(this.activeTable);
+        } catch (e) {
+            alert("Silme Hatası: " + e.message);
+        }
     }
+};
 
-    const modalBody = document.getElementById('modalBody');
-    modalBody.innerHTML = `
-        <div class="detail-grid">
-            <div class="detail-item">
-                <span class="detail-label">Satıcı No</span>
-                <span class="detail-value">${item.Supplier || '-'}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Satıcı Adı</span>
-                <span class="detail-value">${item.SupplierName || '-'}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Şirket Kodu</span>
-                <span class="detail-value">${item.CompanyCode || '-'}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Mali Yıl</span>
-                <span class="detail-value">${item.FiscalYear || '-'}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Belge No</span>
-                <span class="detail-value">${item.AccountingDocument || '-'}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Belge Kalemi</span>
-                <span class="detail-value">${item.AccountingDocumentItem || '-'}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Belge Türü</span>
-                <span class="detail-value">${item.AccountingDocumentType || '-'}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Kayıt Anahtarı</span>
-                <span class="detail-value">${item.PostingKey || '-'}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Kayıt Tarihi</span>
-                <span class="detail-value">${formatDate(item.PostingDate)}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Belge Tarihi</span>
-                <span class="detail-value">${formatDate(item.DocumentDate)}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Vade Başlangıcı</span>
-                <span class="detail-value">${formatDate(item.DueCalculationBaseDate)}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Net Vade Tarihi</span>
-                <span class="detail-value">${formatDate(item.NetDueDate)}</span>
-            </div>
-            <div class="detail-item full-width" style="margin-top: 8px; padding-top: 16px; border-top: 1px solid var(--border-color);">
-                <span class="detail-label">Tutar</span>
-                <span class="detail-value detail-amount" style="color: ${amount < 0 ? 'var(--accent-red)' : 'var(--accent-green)'}">
-                    ${formatNumber(amount)} ${item.CompanyCodeCurrency || ''}
-                </span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">İşlem Tutarı</span>
-                <span class="detail-value">${formatNumber(parseFloat(item.AmountInTransactionCurrency || 0))} ${item.TransactionCurrency || ''}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Gecikme (Gün)</span>
-                <span class="detail-value">${arrears > 0 ? arrears + ' gün' : '-'}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Durum</span>
-                <span class="detail-value">${statusHtml}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Referans</span>
-                <span class="detail-value">${item.DocumentReferenceID || '-'}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Satınalma Belgesi</span>
-                <span class="detail-value">${item.PurchasingDocument || '-'}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Fatura Referansı</span>
-                <span class="detail-value">${item.InvoiceReference || '-'}</span>
-            </div>
-        </div>
-    `;
+// ---------------------------------------------------------
+// DATA SERVICE (ODATA V4)
+// ---------------------------------------------------------
+const DataService = {
+    csrfToken: null,
 
-    document.getElementById('detailModal').classList.add('open');
-}
+    getCsrfToken: async function () {
+        if (this.csrfToken) return this.csrfToken;
+        try {
+            const res = await fetch('/api/vendor/', {
+                method: 'HEAD',
+                headers: { 'x-csrf-token': 'fetch' }
+            });
+            this.csrfToken = res.headers.get('x-csrf-token');
+            return this.csrfToken;
+        } catch (e) {
+            console.warn("CSRF Token alınamadı", e);
+            return null;
+        }
+    },
 
-function closeModal(event) {
-    if (event && event.target !== event.currentTarget) return;
-    document.getElementById('detailModal').classList.remove('open');
-}
+    fetchConfigTable: async function (tableName) {
+        try {
+            const response = await fetch(`/api/vendor/${tableName}`);
+            if (!response.ok) return [];
+            const data = await response.json();
+            AppState[tableName] = data.value || [];
+            return AppState[tableName];
+        } catch (e) {
+            console.error(e);
+            return [];
+        }
+    },
 
-// Close modal with Escape
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-        closeModal();
+    createConfigRows: async function (tableName, rows) {
+        const token = await this.getCsrfToken();
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['x-csrf-token'] = token;
+
+        for (const row of rows) {
+            const { _isNew, ...payload } = row;
+            if (tableName === 'ApproverUsers') {
+                payload.Counter = parseInt(payload.Counter) || 1;
+                payload.LimitAmount = parseFloat(payload.LimitAmount) || 0;
+            }
+            const response = await fetch(`/api/vendor/${tableName}`, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                let errorMsg = "Kayıt Başarısız";
+                const responseBody = await response.text();
+                try {
+                    const err = JSON.parse(responseBody);
+                    errorMsg = err.error?.message || response.statusText;
+                } catch {
+                    errorMsg = responseBody || response.statusText;
+                }
+                throw new Error(errorMsg);
+            }
+        }
+    },
+
+    deleteConfigRows: async function (tableName, rows) {
+        const token = await this.getCsrfToken();
+        const headers = {};
+        if (token) headers['x-csrf-token'] = token;
+
+        for (const row of rows) {
+            let url = `/api/vendor/${tableName}`;
+            if (row._isNew) continue;
+
+            if (tableName === 'ApproverGroups') {
+                url += `('${row.GroupCode}')`;
+            } else if (tableName === 'ApproverUsers') {
+                if (row.ID) {
+                    url += `(${row.ID})`;
+                } else {
+                    console.error("ID bulunamadı, silinemedi", row);
+                    continue;
+                }
+            }
+
+            const response = await fetch(url, {
+                method: 'DELETE',
+                headers: headers
+            });
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error?.message || "Silme Başarısız");
+            }
+        }
+    },
+
+    fetchVendors: async function () {
+        UI.showLoading(true);
+        try {
+            const response = await fetch('/api/vendor/getItemsSummary()');
+            if (!response.ok) throw new Error(await response.text());
+            const data = await response.json();
+            AppState.vendors = data.value || data || [];
+            UI.renderVendorList(AppState.vendors);
+        } catch (err) {
+            console.error(err);
+            document.getElementById('vendorListContainer').innerHTML =
+                `<div class="empty-state" style="color:var(--danger)"><i class="fa-solid fa-triangle-exclamation"></i><br>Verilere Erişilemiyor</div>`;
+        } finally {
+            UI.showLoading(false);
+        }
+    },
+
+    fetchVendorDetails: async function (supplierId) {
+        UI.showLoading(true);
+        try {
+            const filter = `$filter=Supplier eq '${supplierId}'`;
+            const response = await fetch(`/api/vendor/VendorLineItems?${filter}`);
+            if (!response.ok) throw new Error("Detay Hatası");
+            const data = await response.json();
+            UI.renderLineItems(data.value || []);
+        } catch (err) {
+            document.getElementById('lineItemsTableBody').innerHTML =
+                `<tr><td colspan="7" class="empty-state">Detay yüklenemedi.</td></tr>`;
+        } finally {
+            UI.showLoading(false);
+        }
+    }
+};
+
+// ... UI ve EventListener aynı ...
+const UI = {
+    showLoading: function (show) {
+        const el = document.getElementById('loadingOverlay');
+        if (el) {
+            if (show) el.classList.remove('hidden');
+            else el.classList.add('hidden');
+        }
+    },
+    formatMoney: function (amount, currency) {
+        try { return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: currency || 'TRY' }).format(amount); } catch (e) { return amount; }
+    },
+    formatDate: function (dateStr) {
+        if (!dateStr) return '';
+        return new Date(dateStr).toLocaleDateString('tr-TR');
+    },
+    renderVendorList: function (vendors) {
+        const container = document.getElementById('vendorListContainer');
+        container.innerHTML = '';
+        if (!vendors || vendors.length === 0) {
+            container.innerHTML = '<div class="empty-state"><i class="fa-solid fa-user-slash"></i><br>Kayıt Bulunamadı</div>'; return;
+        }
+        vendors.forEach(v => {
+            const div = document.createElement('div');
+            div.className = 'vendor-item';
+            div.onclick = () => this.selectVendor(v, div);
+            div.innerHTML = `
+                <span class="v-amount">${this.formatMoney(v.TotalAmount, v.Currency)}</span>
+                <span class="v-name">${v.SupplierName || v.Supplier}</span>
+                <span class="v-code"><i class="fa-solid fa-hashtag" style="font-size:10px"></i> ${v.Supplier} • ${v.ItemCount} Belge</span>
+            `;
+            container.appendChild(div);
+        });
+    },
+    selectVendor: function (vendor, domElement) {
+        document.querySelectorAll('.vendor-item').forEach(el => el.classList.remove('active'));
+        if (domElement) domElement.classList.add('active');
+        AppState.selectedVendor = vendor;
+        document.getElementById('selectedVendorName').innerText = vendor.SupplierName || vendor.Supplier;
+        document.getElementById('selectedVendorId').innerText = vendor.Supplier;
+        document.getElementById('selectedVendorTotal').innerText = this.formatMoney(vendor.TotalAmount, vendor.Currency);
+        DataService.fetchVendorDetails(vendor.Supplier);
+    },
+    renderLineItems: function (items) {
+        const tbody = document.getElementById('lineItemsTableBody');
+        tbody.innerHTML = '';
+        if (items.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Bu satıcı için açık kalem yok.</td></tr>'; return;
+        }
+        items.forEach(item => {
+            const tr = document.createElement('tr');
+            let statusBadge = '<span style="color:var(--success); font-weight:600"><i class="fa-solid fa-check"></i> Güncel</span>';
+            if (item.NetDueDate && new Date(item.NetDueDate) < new Date()) {
+                statusBadge = '<span style="color:var(--danger); font-weight:600"><i class="fa-solid fa-clock"></i> Gecikmiş</span>';
+            }
+            tr.innerHTML = `<td><input type="checkbox" class="row-select"></td><td><b>${item.AccountingDocument}</b></td><td>${this.formatDate(item.DocumentDate)}</td><td>${this.formatDate(item.NetDueDate)}</td>
+                <td style="font-weight:700; color:var(--text-primary)">${this.formatMoney(item.AmountInCompanyCodeCurrency, item.CompanyCodeCurrency)}</td><td>${item.CompanyCodeCurrency}</td><td>${statusBadge}</td>`;
+            tbody.appendChild(tr);
+        });
+    }
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    Router.init();
+    const searchInput = document.getElementById('vendorSearchInput');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            document.querySelectorAll('.vendor-item').forEach(item => {
+                const text = item.innerText.toLowerCase();
+                item.style.display = text.includes(term) ? 'block' : 'none';
+            });
+        });
     }
 });
 
-// ═══════════════════════════════════════════════════════════
-// EXPORT
-// ═══════════════════════════════════════════════════════════
-
-function exportExcel() {
-    const data = AppState.filteredData;
-    if (data.length === 0) {
-        alert('Dışa aktarılacak veri yok.');
-        return;
-    }
-
-    // CSV export as fallback (no external library needed)
-    const headers = [
-        'Satıcı No', 'Satıcı Adı', 'Şirket Kodu', 'Belge No', 'Belge Türü',
-        'Kayıt Tarihi', 'Vade Tarihi', 'Tutar', 'Para Birimi', 'Gecikme (Gün)', 'Durum'
-    ];
-
-    const rows = data.map(item => {
-        const isCleared = item.IsCleared === 'X' || item.IsCleared === true;
-        const arrears = parseInt(item.ArrearsInDays || 0);
-        const status = isCleared ? 'Temizlendi' : arrears > 0 ? 'Gecikmiş' : 'Açık';
-
-        return [
-            item.Supplier || '',
-            item.SupplierName || '',
-            item.CompanyCode || '',
-            item.AccountingDocument || '',
-            item.AccountingDocumentType || '',
-            item.PostingDate || '',
-            item.NetDueDate || '',
-            item.AmountInCompanyCodeCurrency || '0',
-            item.CompanyCodeCurrency || '',
-            item.ArrearsInDays || '0',
-            status
-        ].map(v => `"${v}"`).join(';');
-    });
-
-    const BOM = '\uFEFF';
-    const csv = BOM + headers.join(';') + '\n' + rows.join('\n');
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `satici_kalemleri_${formatDateForFile(new Date())}.csv`;
-    link.click();
-
-    URL.revokeObjectURL(url);
-    console.log(`[BTP Dashboard] Exported ${data.length} records to CSV`);
-}
-
-// ═══════════════════════════════════════════════════════════
-// UI HELPERS
-// ═══════════════════════════════════════════════════════════
-
-function showLoading(show) {
-    const el = document.getElementById('loadingOverlay');
-    if (show) {
-        el.classList.remove('hidden');
-        el.style.display = 'flex';
-    } else {
-        el.classList.add('hidden');
-        el.style.display = 'none'; // KRİTİK DÜZELTME: Inline stili ez ve gizle
-    }
-    AppState.isLoading = show;
-}
-
-function showError(message) {
-    document.getElementById('errorMessage').textContent = message || 'Bilinmeyen hata';
-    document.getElementById('errorState').style.display = 'flex';
-    document.getElementById('tableWrapper').style.display = 'none';
-}
-
-function hideError() {
-    document.getElementById('errorState').style.display = 'none';
-    document.getElementById('tableWrapper').style.display = '';
-}
-
-function showEmpty() {
-    document.getElementById('emptyState').style.display = 'flex';
-    document.getElementById('tableWrapper').style.display = 'none';
-}
-
-function hideEmpty() {
-    document.getElementById('emptyState').style.display = 'none';
-    document.getElementById('tableWrapper').style.display = '';
-}
-
-function updateRecordCount(count) {
-    document.getElementById('recordCount').textContent = `${count.toLocaleString('tr-TR')} kayıt`;
-}
-
-function setConnectionStatus(connected) {
-    const badge = document.getElementById('connectionBadge');
-    const dot = badge.querySelector('.pulse-dot');
-    const text = badge.querySelector('span');
-
-    if (connected) {
-        badge.style.borderColor = 'rgba(52, 211, 153, 0.2)';
-        badge.style.background = 'rgba(52, 211, 153, 0.08)';
-        badge.style.color = 'var(--accent-green)';
-        dot.style.background = 'var(--accent-green)';
-        text.textContent = 'Bağlı';
-    } else {
-        badge.style.borderColor = 'rgba(248, 113, 113, 0.2)';
-        badge.style.background = 'rgba(248, 113, 113, 0.08)';
-        badge.style.color = 'var(--accent-red)';
-        dot.style.background = 'var(--accent-red)';
-        text.textContent = 'Bağlantı Yok';
-    }
-}
-
-function updateLastRefresh() {
-    const now = new Date();
-    document.getElementById('lastUpdate').textContent =
-        now.toLocaleDateString('tr-TR') + ' ' + now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-}
-
-function refreshData() {
-    const btn = document.querySelector('.header-btn');
-    btn.classList.add('refreshing');
-
-    fetchData().finally(() => {
-        setTimeout(() => btn.classList.remove('refreshing'), 500);
-    });
-}
-
-function toggleSidebar() {
-    document.getElementById('sidebar').classList.toggle('open');
-}
-
-// ═══════════════════════════════════════════════════════════
-// FORMATTERS
-// ═══════════════════════════════════════════════════════════
-
-function formatNumber(num) {
-    if (num === null || num === undefined || isNaN(num)) return '0,00';
-    return num.toLocaleString('tr-TR', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    });
-}
-
-function formatDate(dateStr) {
-    if (!dateStr) return '-';
-    try {
-        // Handle /Date(...)/ format from OData v2
-        if (dateStr.includes && dateStr.includes('/Date(')) {
-            const ms = parseInt(dateStr.replace(/\/Date\((\d+)\)\//, '$1'));
-            const date = new Date(ms);
-            return date.toLocaleDateString('tr-TR');
-        }
-        const date = new Date(dateStr);
-        if (isNaN(date.getTime())) return dateStr;
-        return date.toLocaleDateString('tr-TR');
-    } catch {
-        return dateStr;
-    }
-}
-
-function formatDateForFile(date) {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return `${y}${m}${d}`;
-}
+window.Router = Router;
+window.Config = Config;

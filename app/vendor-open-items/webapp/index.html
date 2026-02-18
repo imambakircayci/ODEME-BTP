@@ -1,276 +1,193 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
+
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Satıcı Kalemleri | BTP Dashboard</title>
-    <meta name="description" content="SAP BTP Vendor Line Items Dashboard - On-Premise Integration" />
-    
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
-    
-    <!-- Phosphor Icons -->
-    <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.0.3/src/regular/style.css" />
-    
-    <!-- Custom Styles -->
-    <link rel="stylesheet" href="css/style.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BTP Vendor Dashboard</title>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css">
 </head>
+
 <body>
 
-    <!-- ═══════════════════════════════════════════════ -->
-    <!-- SIDEBAR                                        -->
-    <!-- ═══════════════════════════════════════════════ -->
-    <aside class="sidebar" id="sidebar">
-        <div class="sidebar-logo">
-            <div class="logo-icon">
-                <i class="ph ph-cube"></i>
-            </div>
-            <span class="logo-text">BTP API</span>
-        </div>
-        
-        <nav class="sidebar-nav">
-            <a href="#" class="nav-item active" id="navDashboard">
-                <i class="ph ph-chart-pie-slice"></i>
-                <span>Dashboard</span>
-            </a>
-            <a href="#" class="nav-item" id="navVendors">
-                <i class="ph ph-users-three"></i>
-                <span>Satıcılar</span>
-            </a>
-            <a href="#" class="nav-item" id="navDocuments">
-                <i class="ph ph-file-text"></i>
-                <span>Belgeler</span>
-            </a>
-            <a href="#" class="nav-item" id="navReports">
-                <i class="ph ph-chart-bar"></i>
-                <span>Raporlar</span>
-            </a>
-        </nav>
-        
-        <div class="sidebar-footer">
-            <div class="connection-badge" id="connectionBadge">
-                <div class="pulse-dot"></div>
-                <span>Cloud Connector</span>
-            </div>
-        </div>
-    </aside>
-
-    <!-- ═══════════════════════════════════════════════ -->
-    <!-- MAIN CONTENT                                   -->
-    <!-- ═══════════════════════════════════════════════ -->
-    <main class="main-content" id="mainContent">
-        
-        <!-- Header -->
-        <header class="top-header">
-            <div class="header-left">
-                <button class="menu-toggle" id="menuToggle" onclick="toggleSidebar()">
-                    <i class="ph ph-list"></i>
-                </button>
-                <div class="header-info">
-                    <h1 class="page-title">Satıcı Açık Kalemleri</h1>
-                    <p class="page-subtitle">FAP_VENDOR_LINE_ITEMS_SRV · On-Premise Entegrasyon</p>
+    <div class="app-container">
+        <!-- SIDEBAR NAVIGATION -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fa-solid fa-cube"></i>
+                    <span>BTP Finans</span>
                 </div>
-            </div>
-            <div class="header-right">
-                <button class="header-btn" onclick="refreshData()" title="Verileri Yenile">
-                    <i class="ph ph-arrows-clockwise"></i>
-                </button>
-                <button class="header-btn" onclick="exportExcel()" title="Excel İndir">
-                    <i class="ph ph-file-xls"></i>
-                </button>
-                <div class="header-divider"></div>
-                <div class="user-avatar" id="userAvatar">
-                    <i class="ph ph-user"></i>
-                </div>
-            </div>
-        </header>
-
-        <!-- KPI Cards -->
-        <section class="kpi-grid" id="kpiGrid">
-            <div class="kpi-card kpi-total">
-                <div class="kpi-icon-wrap">
-                    <i class="ph ph-stack"></i>
-                </div>
-                <div class="kpi-info">
-                    <span class="kpi-label">Toplam Kalem</span>
-                    <span class="kpi-value" id="kpiTotalItems">-</span>
-                </div>
-                <div class="kpi-trend kpi-trend-up">
-                    <i class="ph ph-trend-up"></i>
-                </div>
-            </div>
-            
-            <div class="kpi-card kpi-amount">
-                <div class="kpi-icon-wrap">
-                    <i class="ph ph-currency-circle-dollar"></i>
-                </div>
-                <div class="kpi-info">
-                    <span class="kpi-label">Toplam Tutar</span>
-                    <span class="kpi-value" id="kpiTotalAmount">-</span>
-                    <span class="kpi-unit" id="kpiCurrency">TRY</span>
-                </div>
-                <div class="kpi-trend kpi-trend-neutral">
-                    <i class="ph ph-equals"></i>
-                </div>
-            </div>
-            
-            <div class="kpi-card kpi-suppliers">
-                <div class="kpi-icon-wrap">
-                    <i class="ph ph-buildings"></i>
-                </div>
-                <div class="kpi-info">
-                    <span class="kpi-label">Satıcı Sayısı</span>
-                    <span class="kpi-value" id="kpiSupplierCount">-</span>
-                </div>
-                <div class="kpi-trend kpi-trend-up">
-                    <i class="ph ph-trend-up"></i>
-                </div>
-            </div>
-            
-            <div class="kpi-card kpi-overdue">
-                <div class="kpi-icon-wrap">
-                    <i class="ph ph-warning-circle"></i>
-                </div>
-                <div class="kpi-info">
-                    <span class="kpi-label">Vadesi Geçen</span>
-                    <span class="kpi-value" id="kpiOverdueCount">-</span>
-                </div>
-                <div class="kpi-trend kpi-trend-down">
-                    <i class="ph ph-trend-down"></i>
-                </div>
-            </div>
-        </section>
-
-        <!-- Filters & Search Bar -->
-        <section class="filter-bar" id="filterBar">
-            <div class="search-box">
-                <i class="ph ph-magnifying-glass"></i>
-                <input type="text" id="searchInput" placeholder="Satıcı adı, numarası veya belge no ile ara..." oninput="onSearchInput(this.value)" />
-                <button class="search-clear" id="searchClear" onclick="clearSearch()" style="display:none;">
-                    <i class="ph ph-x"></i>
-                </button>
-            </div>
-            <div class="filter-chips">
-                <button class="chip active" data-filter="all" onclick="setFilter('all', this)">
-                    <i class="ph ph-list-bullets"></i> Tümü
-                    <span class="chip-count" id="chipCountAll">0</span>
-                </button>
-                <button class="chip" data-filter="open" onclick="setFilter('open', this)">
-                    <i class="ph ph-clock"></i> Açık
-                    <span class="chip-count" id="chipCountOpen">0</span>
-                </button>
-                <button class="chip chip-danger" data-filter="overdue" onclick="setFilter('overdue', this)">
-                    <i class="ph ph-warning"></i> Vadesi Geçen
-                    <span class="chip-count" id="chipCountOverdue">0</span>
-                </button>
-                <button class="chip chip-success" data-filter="cleared" onclick="setFilter('cleared', this)">
-                    <i class="ph ph-check-circle"></i> Temizlenen
-                    <span class="chip-count" id="chipCountCleared">0</span>
-                </button>
-            </div>
-        </section>
-
-        <!-- Data Table -->
-        <section class="table-container" id="tableContainer">
-            <div class="table-header">
-                <div class="table-title">
-                    <h2>Kalem Listesi</h2>
-                    <span class="record-count" id="recordCount">0 kayıt</span>
-                </div>
-                <div class="table-actions">
-                    <select id="sortSelect" onchange="onSortChange(this.value)" class="sort-select">
-                        <option value="PostingDate-desc">Tarih (Yeni → Eski)</option>
-                        <option value="PostingDate-asc">Tarih (Eski → Yeni)</option>
-                        <option value="AmountInCompanyCodeCurrency-desc">Tutar (Büyük → Küçük)</option>
-                        <option value="AmountInCompanyCodeCurrency-asc">Tutar (Küçük → Büyük)</option>
-                        <option value="SupplierName-asc">Satıcı (A → Z)</option>
-                        <option value="ArrearsInDays-desc">Gecikme (Çok → Az)</option>
-                    </select>
-                </div>
-            </div>
-            
-            <!-- Table -->
-            <div class="table-wrapper" id="tableWrapper">
-                <table class="data-table" id="dataTable">
-                    <thead>
-                        <tr>
-                            <th class="th-supplier">Satıcı</th>
-                            <th class="th-company">Şirket</th>
-                            <th class="th-document">Belge No</th>
-                            <th class="th-type">Tür</th>
-                            <th class="th-posting-date">Kayıt Tarihi</th>
-                            <th class="th-due-date">Vade Tarihi</th>
-                            <th class="th-amount">Tutar</th>
-                            <th class="th-arrears">Gecikme</th>
-                            <th class="th-status">Durum</th>
-                            <th class="th-actions"></th>
-                        </tr>
-                    </thead>
-                    <tbody id="tableBody">
-                        <!-- Data will be populated by JS -->
-                    </tbody>
-                </table>
-            </div>
-            
-            <!-- Loading State -->
-            <div class="loading-overlay" id="loadingOverlay">
-                <div class="loader">
-                    <div class="loader-spinner"></div>
-                    <p>Veriler yükleniyor...</p>
-                    <span class="loader-sub">SAP On-Premise sistemine bağlanılıyor</span>
-                </div>
-            </div>
-            
-            <!-- Empty State -->
-            <div class="empty-state" id="emptyState" style="display:none;">
-                <div class="empty-icon">
-                    <i class="ph ph-clipboard-text"></i>
-                </div>
-                <h3>Veri Bulunamadı</h3>
-                <p>Satıcı kalemi bulunamadı veya bağlantı hatası oluştu.</p>
-                <button class="btn-primary" onclick="refreshData()">
-                    <i class="ph ph-arrows-clockwise"></i> Tekrar Dene
-                </button>
             </div>
 
-            <!-- Error State -->
-            <div class="error-state" id="errorState" style="display:none;">
-                <div class="error-icon">
-                    <i class="ph ph-wifi-slash"></i>
+            <nav class="sidebar-menu">
+                <button class="menu-item active" onclick="Router.navigate('page-approval')">
+                    <i class="fa-solid fa-file-invoice-dollar"></i>
+                    <span>Ödeme Onayı</span>
+                </button>
+                <button class="menu-item" onclick="Router.navigate('page-settings')">
+                    <i class="fa-solid fa-sliders"></i>
+                    <span>Tanımlamalar</span>
+                </button>
+                <button class="menu-item" onclick="Router.navigate('page-reports')">
+                    <i class="fa-solid fa-chart-pie"></i>
+                    <span>Raporlar</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <img src="https://ui-avatars.com/api/?name=Admin+User&background=6366f1&color=fff" alt="User">
+                    <div class="details">
+                        <span class="name">Admin User</span>
+                        <span class="role">Finans Müdürü</span>
+                    </div>
                 </div>
-                <h3>Bağlantı Hatası</h3>
-                <p id="errorMessage">On-Premise sisteme bağlanılamadı.</p>
-                <button class="btn-primary" onclick="refreshData()">
-                    <i class="ph ph-arrows-clockwise"></i> Tekrar Dene
-                </button>
             </div>
-        </section>
+        </aside>
 
-        <!-- Footer -->
-        <footer class="main-footer">
-            <span>Son güncelleme: <strong id="lastUpdate">-</strong></span>
-            <span>Kaynak: SAP On-Premise · Cloud Connector · KARACA</span>
-        </footer>
-    </main>
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content">
 
-    <!-- Detail Modal -->
-    <div class="modal-overlay" id="detailModal" onclick="closeModal(event)">
-        <div class="modal-content" onclick="event.stopPropagation()">
-            <div class="modal-header">
-                <h3><i class="ph ph-file-text"></i> Kalem Detayı</h3>
-                <button class="modal-close" onclick="closeModal()">
-                    <i class="ph ph-x"></i>
-                </button>
-            </div>
-            <div class="modal-body" id="modalBody">
-                <!-- Details filled by JS -->
-            </div>
-        </div>
+            <!-- HEADER -->
+            <header class="top-bar">
+                <div class="page-title">
+                    <h1 id="page-header-title">Ödeme Onay Ekranı</h1>
+                    <p id="page-header-desc">Satıcı bakiyelerini inceleyin ve ödeme onayı verin.</p>
+                </div>
+                <div class="actions">
+                    <button class="icon-btn"><i class="fa-regular fa-bell"></i></button>
+                    <button class="icon-btn"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
+                </div>
+            </header>
+
+            <!-- ============================================== -->
+            <!-- VIEW 1: ÖDEME ONAYI (SPLIT VIEW)              -->
+            <!-- ============================================== -->
+            <section id="page-approval" class="view-section active">
+                <div class="split-layout">
+
+                    <!-- LEFT: VENDOR MASTER LIST -->
+                    <div class="master-list-panel">
+                        <div class="panel-header">
+                            <h3>Satıcılar</h3>
+                            <div class="search-box">
+                                <i class="fa-solid fa-search"></i>
+                                <input type="text" id="vendorSearchInput" placeholder="Satıcı ara...">
+                            </div>
+                        </div>
+                        <div class="vendor-list" id="vendorListContainer">
+                            <!-- JS ile doldurulacak -->
+                            <div class="loading-spinner">
+                                <i class="fa-solid fa-circle-notch fa-spin"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- RIGHT: DETAIL TABLE -->
+                    <div class="detail-panel">
+                        <div class="panel-header" id="detailHeader">
+                            <div class="vendor-info">
+                                <h2 id="selectedVendorName">Satıcı Seçiniz</h2>
+                                <span id="selectedVendorId" class="badge">---</span>
+                            </div>
+                            <div class="panel-actions">
+                                <span class="total-label">Toplam Bakiye:</span>
+                                <span class="total-value" id="selectedVendorTotal">0.00 TRY</span>
+                                <button class="btn btn-primary" onclick="approveSelected()">
+                                    <i class="fa-solid fa-check"></i> Onayla
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 40px;"><input type="checkbox" id="selectAll"></th>
+                                        <th>Belge No</th>
+                                        <th>Tarih</th>
+                                        <th>Vade</th>
+                                        <th>Tutar</th>
+                                        <th>Para Birimi</th>
+                                        <th>Durum</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="lineItemsTableBody">
+                                    <tr>
+                                        <td colspan="7" class="empty-state">
+                                            <i class="fa-solid fa-arrow-left"></i>
+                                            <span>Detayları görmek için soldan bir satıcı seçin.</span>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================== -->
+            <!-- VIEW 2: TANIMLAMALAR (MAINTENANCE TABLES)     -->
+            <!-- ============================================== -->
+            <section id="page-settings" class="view-section" style="display: none;">
+                <div class="tabs-container">
+                    <div class="tabs-header">
+                        <button class="tab-btn active" onclick="Config.openTab(this, 'ApproverGroups')">Onaycı
+                            Grupları</button>
+                        <button class="tab-btn" onclick="Config.openTab(this, 'ApproverUsers')">Onaycı
+                            Kullanıcıları</button>
+                        <button class="tab-btn" onclick="Config.openTab(this, 'GroupDetermination')">Onay Grubu
+                            Belirleme</button>
+                        <button class="tab-btn" onclick="Config.openTab(this, 'ApprovalDetermination')">Onaycı
+                            Belirleme</button>
+                    </div>
+
+                    <div class="tabs-content">
+                        <!-- Toolbar -->
+                        <div class="table-toolbar">
+                            <h3 id="tableTitle" style="flex:1; margin:0; font-size:1.1rem; color:#fff">Tablo Başlığı
+                            </h3>
+                            <button class="btn btn-sm btn-outline" onclick="Config.addRow()"><i
+                                    class="fa-solid fa-plus"></i> Yeni Giriş</button>
+                            <button class="btn btn-sm btn-outline danger" onclick="Config.deleteRows()"><i
+                                    class="fa-solid fa-trash"></i> Sil</button>
+                        </div>
+
+                        <!-- Dynamic Table Container -->
+                        <div id="configTableContainer" class="config-table-wrapper">
+                            <!-- JS ile doldurulacak -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================== -->
+            <!-- VIEW 3: BOŞ TEST SAYFASI                      -->
+            <!-- ============================================== -->
+            <section id="page-reports" class="view-section" style="display: none;">
+                <div class="empty-placeholder">
+                    <i class="fa-solid fa-chart-line" style="font-size: 48px; margin-bottom: 20px;"></i>
+                    <h3>Raporlar Alanı</h3>
+                    <p>Buraya grafikler ve özet tablolar gelecek.</p>
+                </div>
+            </section>
+
+        </main>
     </div>
 
-    <!-- App Script -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+        <p>Veriler Yükleniyor...</p>
+    </div>
+
+    <!-- Logic -->
     <script src="js/app.js"></script>
 </body>
+
 </html>

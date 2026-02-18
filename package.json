@@ -1,36 +1,54 @@
 {
   "name": "btp-api",
   "version": "1.0.0",
-  "description": "SAP BTP CAP Application - Vendor Open Items via On-Premise API",
+  "description": "SAP BTP CAP Application - Vendor Dashboard & Approval",
   "repository": "",
   "license": "UNLICENSED",
   "private": true,
   "dependencies": {
-    "@sap/cds": "^9",
+    "@sap/cds": "^8",
+    "@sap/cds-hana": "^2",
+    "@sap/xssec": "^4",
+    "@sap/xsenv": "^5",
+    "passport": "^0.7",
+    "hdb": "^0.19",
     "@sap-cloud-sdk/http-client": "^3",
     "@sap-cloud-sdk/connectivity": "^3",
     "@sap-cloud-sdk/resilience": "^3",
-    "express": "^4",
-    "passport": "^0.7"
+    "express": "^4"
   },
   "devDependencies": {
-    "@cap-js/sqlite": "^2",
-    "@sap/cds-dk": "^9",
+    "@cap-js/sqlite": "^1",
+    "@sap/cds-dk": "^8",
     "rimraf": "^5"
   },
   "scripts": {
     "start": "cds-serve",
-    "build": "cds build --production",
-    "clean": "rimraf gen",
+    "build": "rimraf gen mta_archives && mbt build",
+    "deploy": "cf deploy mta_archives/btp-api_1.0.0.mtar",
     "watch": "cds watch"
   },
   "cds": {
     "requires": {
+      "db": {
+        "kind": "sql"
+      },
       "auth": {
         "strategy": "JWT"
       },
       "destinations": true,
-      "connectivity": true
+      "connectivity": true,
+      "[production]": {
+        "db": {
+          "kind": "hana"
+        },
+        "auth": {
+          "kind": "xsuaa"
+        }
+      }
+    },
+    "hana": {
+      "deploy-format": "hdbtable"
     }
   }
 }

@@ -1,0 +1,41 @@
+---
+applications:
+  # 1. DB DEPLOYER (HANA Schema)
+  - name: btp-api-db-deployer
+    path: gen/db
+    buildpacks: [nodejs_buildpack]
+    memory: 256M
+    no-route: true
+    health-check-type: process
+    services:
+      - btp-api-db
+
+  # 2. BACKEND SERVİSİ (HANA + Bağlantı)
+  - name: btp-api-srv
+    path: gen/srv
+    buildpacks: [nodejs_buildpack]
+    memory: 512M
+    disk_quota: 512M
+    random-route: false
+    routes:
+      - route: fe1c7801trial-dev-btp-api-srv.cfapps.us10-001.hana.ondemand.com
+    services:
+      - btp-api-auth
+      - btp-api-destination
+      - btp-api-connectivity
+      - btp-api-db
+
+  # 3. APPROUTER (Frontend)
+  - name: btp-api-approuter
+    path: app/vendor-open-items
+    buildpacks: [nodejs_buildpack]
+    memory: 256M
+    disk_quota: 256M
+    random-route: true
+    env:
+      destinations: >
+        [
+          {"name":"srv-api", "url":"https://fe1c7801trial-dev-btp-api-srv.cfapps.us10-001.hana.ondemand.com", "forwardAuthToken": true}
+        ]
+    services:
+      - btp-api-auth
